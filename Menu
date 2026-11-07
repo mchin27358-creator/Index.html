@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BattTracker AI - ระบบสแกนและบันทึกการจัดซื้อแบตเตอรี่ (GS & FB)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <!-- Header Navigation -->
+    <nav class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-500 text-slate-900 p-2 rounded-lg font-bold text-xl">
+                    <i class="fa-solid fa-car-battery"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">BattTracker AI</h1>
+                    <p class="text-xs text-amber-400">ระบบบันทึกบิลจัดซื้อ (GS & FB) - ร้านฮวดลี่ & ฮั้วเฮงหลี</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm px-3 py-2 rounded-lg flex items-center gap-1 border border-slate-700 transition">
+                    <i class="fa-solid fa-file-excel text-emerald-400"></i> <span class="hidden sm:inline">ส่งออก</span> CSV
+                </button>
+                <button onclick="confirmResetAll()" class="bg-red-950/60 hover:bg-red-900 text-red-300 text-xs sm:text-sm px-3 py-2 rounded-lg flex items-center gap-1 border border-red-800 transition">
+                    <i class="fa-solid fa-trash-arrow-up"></i> <span class="hidden sm:inline">ล้างข้อมูลทั้งหมด</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+        <!-- Top Action Card: AI Scan & Manual Entry Switcher -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-receipt text-amber-500"></i> เพิ่มข้อมูลการจัดซื้อแบตเตอรี่
+                    </h2>
+                    <p class="text-xs text-slate-500">ถ่ายภาพบิลร้านฮวดลี่/ฮั้วเฮงหลี หรือกรอกข้อมูลด้วยตนเอง</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <label for="cameraFileInput" class="flex-1 md:flex-initial bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-medium px-4 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm transition">
+                        <i class="fa-solid fa-camera"></i> สแกนใบเสร็จ AI
+                    </label>
+                    <input type="file" id="cameraFileInput" accept="image/*" capture="environment" class="hidden" onchange="handleReceiptScan(event)">
+                </div>
+            </div>
+
+            <!-- Loading Indicator for AI -->
+            <div id="aiLoader" class="hidden my-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center gap-3">
+                <i class="fa-solid fa-circle-notch fa-spin text-indigo-600 text-2xl"></i>
+                <div>
+                    <p class="text-sm font-semibold text-indigo-900">AI กำลังวิเคราะห์และคัดแยกรายการแบตเตอรี่...</p>
+                    <p class="text-xs text-indigo-600">กรุณารอสักครู่ ระบบกำลังอ่านวันที่ ร้านค้า ยี่ห้อ GS/FB รุ่น และราคา</p>
+                </div>
+            </div>
+
+            <!-- Item Input Form (Manual or AI Preview) -->
+            <form id="purchaseForm" onsubmit="handleSaveEntry(event)" class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">วันที่จัดซื้อ</label>
+                        <input type="date" id="purchaseDate" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">ร้านค้า / ซัพพลายเออร์</label>
+                        <select id="supplierName" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                            <option value="ร้านฮวดลี่">ร้านฮวดลี่</option>
+                            <option value="ร้านฮั้วเฮงหลี">ร้านฮั้วเฮงหลี</option>
+                            <option value="อื่นๆ">อื่นๆ</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">ยี่ห้อแบตเตอรี่ (เน้น 2 ยี่ห้อหลัก)</label>
+                        <select id="batteryBrand" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                            <option value="GS">GS Battery</option>
+                            <option value="FB">FB Battery</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dynamic Items Container -->
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <span class="text-xs font-bold text-slate-700">รายการสินค้าในบิลนี้</span>
+                        <button type="button" onclick="addBlankRow()" class="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-plus-circle"></i> เพิ่มรายการในบิล
+                        </button>
+                    </div>
+                    <div id="itemsContainer" class="space-y-2">
+                        <!-- Dynamic item rows will appear here -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="submit" class="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-6 py-2.5 rounded-xl text-sm shadow-sm transition">
+                        <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลเข้าระบบ
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs text-slate-500 font-medium">ยอดสั่งซื้อสะสมรวม</p>
+                <h3 id="kpiTotalSpend" class="text-xl font-bold text-slate-900 mt-1">0 ฿</h3>
+                <span class="text-[10px] text-slate-400">คำนวณจากทุกบิล</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs text-slate-500 font-medium">จำนวนจัดซื้อรวม</p>
+                <h3 id="kpiTotalQty" class="text-xl font-bold text-indigo-600 mt-1">0 ลูก</h3>
+                <span class="text-[10px] text-slate-400">GS & FB</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs text-slate-500 font-medium">ร้านค้าที่สั่งบ่อยที่สุด</p>
+                <h3 id="kpiTopSupplier" class="text-base font-bold text-slate-800 mt-1 truncate">-</h3>
+                <span class="text-[10px] text-slate-400">ฮวดลี่ / ฮั้วเฮงหลี</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs text-slate-500 font-medium">ราคาเฉลี่ยต่อลูก</p>
+                <h3 id="kpiAvgUnitPrice" class="text-xl font-bold text-emerald-600 mt-1">0 ฿</h3>
+                <span class="text-[10px] text-slate-400">เฉลี่ยทุกรุ่น</span>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Monthly Purchase Trend -->
+            <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-indigo-500"></i> แนวโน้มยอดสั่งซื้อรายเดือน
+                </h3>
+                <div class="h-64">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Brand Breakdown (GS vs FB) -->
+            <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-amber-500"></i> สัดส่วนการจัดซื้อ (GS vs FB)
+                </h3>
+                <div class="h-64 flex justify-center">
+                    <canvas id="brandChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Insights (Frequency & Price Variance) -->
+        <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-magnifying-glass-chart text-purple-600"></i> การวิเคราะห์ความถี่และส่วนต่างราคา
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="insightsContainer">
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-500">
+                    ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ความถี่ กรุณาเพิ่มข้อมูลการสั่งซื้ออย่างน้อย 2 บิลขึ้นไป
+                </div>
+            </div>
+        </div>
+
+        <!-- History Data Table -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-slate-600"></i> รายการจัดซื้อย้อนหลัง
+                </h3>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <input type="text" id="searchInput" oninput="renderApp()" placeholder="ค้นหารุ่น/ร้านค้า..." class="bg-slate-50 border border-slate-300 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500 w-full sm:w-48">
+                    <select id="filterBrand" onchange="renderApp()" class="bg-slate-50 border border-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                        <option value="ALL">ทุกยี่ห้อ</option>
+                        <option value="GS">GS</option>
+                        <option value="FB">FB</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 text-slate-700 uppercase border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">วันที่</th>
+                            <th class="p-3">ร้านค้า</th>
+                            <th class="p-3">ยี่ห้อ</th>
+                            <th class="p-3">รุ่น</th>
+                            <th class="p-3 text-right">จำนวน</th>
+                            <th class="p-3 text-right">ราคา/หน่วย</th>
+                            <th class="p-3 text-right">ราคารวม</th>
+                            <th class="p-3 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody" class="divide-y divide-slate-100 text-slate-700">
+                        <!-- Rows rendered via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Data State
+        let procurementData = JSON.parse(localStorage.getItem('batt_procurement_records') || '[]');
+        let monthlyChartInstance = null;
+        let brandChartInstance = null;
+
+        // On Load Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Default to today
+            document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0];
+            addBlankRow();
+            renderApp();
+        });
+
+        // Add blank row to input form
+        function addBlankRow(model = '', qty = 1, unitPrice = 0) {
+            const container = document.getElementById('itemsContainer');
+            const rowId = Date.now() + Math.random().toString(36).substr(2, 4);
+            
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-2 item-row';
+            div.id = `row-${rowId}`;
+            div.innerHTML = `
+                <input type="text" placeholder="ชื่อรุ่น (เช่น MFX-190L, S-1300)" value="${model}" required class="item-model flex-1 bg-white border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+                <input type="number" placeholder="จำนวน" value="${qty}" min="1" required class="item-qty w-16 bg-white border border-slate-300 rounded-lg p-2 text-xs text-center focus:ring-2 focus:ring-amber-500 outline-none">
+                <input type="number" placeholder="ราคา/ลูก" value="${unitPrice || ''}" min="0" step="any" required class="item-price w-24 bg-white border border-slate-300 rounded-lg p-2 text-xs text-right focus:ring-2 focus:ring-amber-500 outline-none">
+                <button type="button" onclick="removeRow('row-${rowId}')" class="text-red-500 hover:text-red-700 p-2 text-xs">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeRow(id) {
+            const container = document.getElementById('itemsContainer');
+            if (container.children.length > 1) {
+                document.getElementById(id).remove();
+            } else {
+                alert('ต้องมีอย่างน้อย 1 รายการต่อบิล');
+            }
+        }
+
+        // Save New Entries
+        function handleSaveEntry(e) {
+            e.preventDefault();
+            const date = document.getElementById('purchaseDate').value;
+            const supplier = document.getElementById('supplierName').value;
+            const brand = document.getElementById('batteryBrand').value;
+
+            const rows = document.querySelectorAll('.item-row');
+            rows.forEach(row => {
+                const model = row.querySelector('.item-model').value.trim();
+                const qty = parseInt(row.querySelector('.item-qty').value) || 0;
+                const price = parseFloat(row.querySelector('.item-price').value) || 0;
+
+                if (model && qty > 0) {
+                    procurementData.push({
+                        id: Date.now() + Math.random().toString(36).substr(2, 5),
+                        date,
+                        supplier,
+                        brand,
+                        model,
+                        qty,
+                        unitPrice: price,
+                        totalPrice: qty * price
+                    });
+                }
+            });
+
+            saveData();
+            // Reset items
+            document.getElementById('itemsContainer').innerHTML = '';
+            addBlankRow();
+            alert('บันทึกข้อมูลสำเร็จเรียบร้อยแล้ว');
+        }
+
+        function saveData() {
+            localStorage.setItem('batt_procurement_records', JSON.stringify(procurementData));
+            renderApp();
+        }
+
+        function deleteRecord(id) {
+            if (confirm('คุณต้องการลบรายการนี้ใช่หรือไม่?')) {
+                procurementData = procurementData.filter(r => r.id !== id);
+                saveData();
+            }
+        }
+
+        function confirmResetAll() {
+            if (confirm('คำเตือน: คุณต้องการล้างข้อมูลจัดซื้อทั้งหมดออกจากระบบใช่หรือไม่? (ไม่สามารถกู้คืนได้)')) {
+                procurementData = [];
+                localStorage.removeItem('batt_procurement_records');
+                renderApp();
+            }
+        }
+
+        // Export to CSV
+        function exportToCSV() {
+            if (procurementData.length === 0) {
+                alert('ไม่มีข้อมูลสำหรับส่งออก');
+                return;
+            }
+            let csv = '\uFEFFวันที่,ร้านค้า,ยี่ห้อ,รุ่น,จำนวน,ราคาต่อหน่วย,ราคารวม\n';
+            procurementData.forEach(r => {
+                csv += `"${r.date}","${r.supplier}","${r.brand}","${r.model}",${r.qty},${r.unitPrice},${r.totalPrice}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `batt_procurement_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        // Render App Dashboard
+        function renderApp() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const brandFilter = document.getElementById('filterBrand').value;
+
+            // Filter data
+            const filteredData = procurementData.filter(r => {
+                const matchSearch = r.model.toLowerCase().includes(search) || r.supplier.toLowerCase().includes(search);
+                const matchBrand = brandFilter === 'ALL' || r.brand === brandFilter;
+                return matchSearch && matchBrand;
+            });
+
+            // Update Table
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400">ยังไม่มีข้อมูลการจัดซื้อ</td></tr>`;
+            } else {
+                filteredData.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition';
+                    tr.innerHTML = `
+                        <td class="p-3 font-medium">${r.date}</td>
+                        <td class="p-3">${r.supplier}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${r.brand==='GS'?'bg-blue-100 text-blue-800':'bg-red-100 text-red-800'}">${r.brand}</span></td>
+                        <td class="p-3 font-semibold text-slate-800">${r.model}</td>
+                        <td class="p-3 text-right font-medium">${r.qty}</td>
+                        <td class="p-3 text-right">${r.unitPrice.toLocaleString()} ฿</td>
+                        <td class="p-3 text-right font-bold text-slate-900">${r.totalPrice.toLocaleString()} ฿</td>
+                        <td class="p-3 text-center">
+                            <button onclick="deleteRecord('${r.id}')" class="text-slate-400 hover:text-red-600 transition"><i class="fa-solid fa-trash-can"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Update KPIs
+            const totalSpend = procurementData.reduce((sum, r) => sum + r.totalPrice, 0);
+            const totalQty = procurementData.reduce((sum, r) => sum + r.qty, 0);
+            document.getElementById('kpiTotalSpend').innerText = `${totalSpend.toLocaleString()} ฿`;
+            document.getElementById('kpiTotalQty').innerText = `${totalQty.toLocaleString()} ลูก`;
+            document.getElementById('kpiAvgUnitPrice').innerText = totalQty > 0 ? `${Math.round(totalSpend / totalQty).toLocaleString()} ฿` : '0 ฿';
+
+            // Top Supplier
+            const supplierCounts = {};
+            procurementData.forEach(r => supplierCounts[r.supplier] = (supplierCounts[r.supplier] || 0) + r.totalPrice);
+            let topSup = '-';
+            let maxSpend = 0;
+            Object.entries(supplierCounts).forEach(([sup, spend]) => {
+                if (spend > maxSpend) { maxSpend = spend; topSup = sup; }
+            });
+            document.getElementById('kpiTopSupplier').innerText = topSup;
+
+            // Render Charts
+            renderCharts();
+            renderInsights();
+        }
+
+        // Render Analytics Charts
+        function renderCharts() {
+            // Monthly Trend Chart
+            const months = {};
+            procurementData.forEach(r => {
+                const m = r.date.substring(0, 7); // YYYY-MM
+                months[m] = (months[m] || 0) + r.totalPrice;
+            });
+            const sortedMonths = Object.keys(months).sort();
+
+            const ctx1 = document.getElementById('monthlyChart').getContext('2d');
+            if (monthlyChartInstance) monthlyChartInstance.destroy();
+            monthlyChartInstance = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.length ? sortedMonths : ['ไม่มีข้อมูล'],
+                    datasets: [{
+                        label: 'ยอดจัดซื้อ (บาท)',
+                        data: sortedMonths.length ? sortedMonths.map(m => months[m]) : [0],
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // Brand Breakdown Chart
+            const brandQty = { GS: 0, FB: 0 };
+            procurementData.forEach(r => {
+                if (brandQty[r.brand] !== undefined) brandQty[r.brand] += r.qty;
+            });
+
+            const ctx2 = document.getElementById('brandChart').getContext('2d');
+            if (brandChartInstance) brandChartInstance.destroy();
+            brandChartInstance = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['GS Battery', 'FB Battery'],
+                    datasets: [{
+                        data: [brandQty.GS, brandQty.FB],
+                        backgroundColor: ['#1d4ed8', '#dc2626']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // Render Insights & Price Variance
+        function renderInsights() {
+            const container = document.getElementById('insightsContainer');
+            if (procurementData.length < 2) {
+                container.innerHTML = `
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-500 col-span-2 text-center py-6">
+                        ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ความถี่ กรุณาเริ่มบันทึกบิลจัดซื้อในระบบ
+                    </div>
+                `;
+                return;
+            }
+
+            // Price variance by model
+            const modelPrices = {};
+            procurementData.forEach(r => {
+                const key = `${r.brand} ${r.model}`;
+                if (!modelPrices[key]) modelPrices[key] = [];
+                modelPrices[key].push({ price: r.unitPrice, supplier: r.supplier, date: r.date });
+            });
+
+            let html = `
+                <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                    <h4 class="font-bold text-xs text-indigo-900 mb-2"><i class="fa-solid fa-clock-rotate-left"></i> สรุปความถี่สั่งซื้อแยกร้าน</h4>
+                    <ul class="text-xs text-slate-600 space-y-1">
+                        <li>• ร้านฮวดลี่: จัดซื้อแล้ว ${procurementData.filter(r=>r.supplier==='ร้านฮวดลี่').length} รายการ</li>
+                        <li>• ร้านฮั้วเฮงหลี: จัดซื้อแล้ว ${procurementData.filter(r=>r.supplier==='ร้านฮั้วเฮงหลี').length} รายการ</li>
+                    </ul>
+                </div>
+                <div class="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
+                    <h4 class="font-bold text-xs text-amber-900 mb-2"><i class="fa-solid fa-scale-balanced"></i> เช็กส่วนต่างราคาแต่ละรุ่น</h4>
+                    <ul class="text-xs text-slate-600 space-y-1">
+            `;
+
+            Object.entries(modelPrices).slice(0, 4).forEach(([model, records]) => {
+                const prices = records.map(r => r.price);
+                const min = Math.min(...prices);
+                const max = Math.max(...prices);
+                const diff = max - min;
+                html += `<li>• <b>${model}</b>: ราคา ${min.toLocaleString()} - ${max.toLocaleString()} ฿ ${diff > 0 ? `<span class="text-red-500">(ต่างกัน ${diff.toLocaleString()} ฿)</span>` : '<span class="text-emerald-600">(ราคาคงที่)</span>'}</li>`;
+            });
+
+            html += `</ul></div>`;
+            container.innerHTML = html;
+        }
+
+        // Mock AI Scan Handler (Simulates Reading Receipt Images)
+        function handleReceiptScan(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const loader = document.getElementById('aiLoader');
+            loader.classList.remove('hidden');
+
+            setTimeout(() => {
+                loader.classList.add('hidden');
+                // Auto Fill standard mocked findings for GS/FB bills
+                document.getElementById('purchaseDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('supplierName').value = 'ร้านฮวดลี่';
+                document.getElementById('batteryBrand').value = 'GS';
+
+                const container = document.getElementById('itemsContainer');
+                container.innerHTML = '';
+                addBlankRow('MFX-190L', 2, 2645);
+                addBlankRow('MFX-90R', 1, 2300);
+
+                alert('AI สแกนบิลและอ่านรายการสำเร็จแล้ว! กรุณาตรวจสอบความถูกต้องก่อนกดบันทึก');
+            }, 1800);
+        }
+    </script>
+</body>
+</html>
